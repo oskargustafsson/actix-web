@@ -270,15 +270,21 @@ pub struct JsonBody<T: HttpMessage, U: DeserializeOwned> {
 impl<T: HttpMessage, U: DeserializeOwned> JsonBody<T, U> {
     /// Create `JsonBody` for request.
     pub fn new<S>(req: &T, cfg: Option<&JsonConfig<S>>) -> Self {
-        // check content-type
-        let json = if let Ok(Some(mime)) = req.mime_type() {
-            mime.subtype() == mime::JSON || mime.suffix() == Some(mime::JSON) ||
-                cfg.map_or(false, |cfg| {
-                    cfg.content_type.as_ref().map_or(false, |predicate| predicate(mime))
-                })
-        } else {
-            false
+        // Check content-type
+        // Assume default mime if missing (https://tools.ietf.org/html/rfc2045#section-5.2)
+        let mime = match req.mime_type() {
+            Ok(mime) => mime.unwrap_or(mime::TEXT_PLAIN),
+            Err(_) => mime::TEXT_PLAIN,
         };
+
+        let json = mime.subtype() == mime::JSON
+            || mime.suffix() == Some(mime::JSON)
+            || cfg.map_or(false, |cfg| {
+                cfg.content_type
+                    .as_ref()
+                    .map_or(false, |predicate| predicate(mime))
+            });
+
         if !json {
             return JsonBody {
                 limit: 262_144,
